@@ -20,7 +20,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       path.join(
         workspaceDir,
         'veracode_artifact_directory',
-        'scaResults.json'
+        'results.json'
       ),
       '--async',
       '--decouple',
