@@ -29,6 +29,9 @@ inputs:
     description: "Fix remote flag (default: true)"
     required: true
     default: 'true'
+  fix-sast-params:
+    description: "SAST Fix IDs (e.g., SAST-123, SAST-456)"
+    required: false
 
 # outputs:
 #   run-next-step:
