@@ -41,4 +41,4 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
   }
 }
 
-module.exports = runFixSca;
+module.exports = runFixSast;
