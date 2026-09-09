@@ -19,7 +19,7 @@ async function main() {
 
     const workspaceDir = process.env.GITHUB_WORKSPACE;
     const statusFilePath = path.join(workspaceDir, 'source-code', 'sca-fix-status');
-    const actionPath = `${__dirname}/..`
+    const actionPath = `${__dirname}/..`;
     const sourceCodeDir = path.join(workspaceDir, 'source-code');
 
     core.info('Starting Veracode Fix for SCA action...');
@@ -28,16 +28,25 @@ async function main() {
     core.info('Setting up ast-grep...');
     await setupAstGrep(actionPath);
 
-    const result = await runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
-    core.info(`Result: ${JSON.stringify(result)}`);
-    // Run Fix for SCA
-    core.info('Running Fix for SCA...');
-    const fixScaOutput = await runFixSca(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
-    
-    if (!fixScaOutput.hasChanges) {
-      core.info('No changes detected. Skipping PR creation.');
-      fs.writeFileSync(statusFilePath, 'NO_CHANGES_DETECTED', null, 2);
-      return;
+    // Determine if this is SAST or SCA fix
+    const isSastFix = fixScaParams && fixScaParams.includes('SAST-');
+    let fixOutput = null;
+
+    core.info('Running Fix for On the basis of comment...');
+    if (isSastFix) {
+      core.info('Running SAST Fix...');
+      fixOutput = await runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
+      core.info(`SAST Fix Result: ${JSON.stringify(fixOutput)}`);
+    } else {
+      core.info('Running Fix for SCA...');
+      fixOutput = await runFixSca(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
+      core.info(`SCA Fix Result: ${JSON.stringify(fixOutput)}`);
+
+      if (!fixOutput.hasChanges) {
+        core.info('No changes detected. Skipping PR creation.');
+        fs.writeFileSync(statusFilePath, 'NO_CHANGES_DETECTED', null, 2);
+        return;
+      }
     }
 
     // Create Pull Request
@@ -61,7 +70,7 @@ async function main() {
       githubApiUrl
     );
 
-    core.info('Veracode Fix for SCA action completed successfully.');
+    core.info('Veracode Fix action completed successfully.');
   } catch (error) {
     core.setFailed(error.message);
     process.exit(1);
