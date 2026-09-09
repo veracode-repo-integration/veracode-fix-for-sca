@@ -88631,6 +88631,57 @@ module.exports = createPr;
 
 /***/ }),
 
+/***/ 13164:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const fs = __nccwpck_require__(79896);
+const path = __nccwpck_require__(16928);
+const os = __nccwpck_require__(70857);
+const core = __nccwpck_require__(37484);
+const exec = __nccwpck_require__(95236);
+
+async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir) {
+  try {
+    // Set up environment for veracode CLI
+    const isWindows = process.platform === 'win32';
+    const binaryName = isWindows ? 'veracode.exe' : 'veracode';
+    const veracodeBinary = path.join(`${process.env.CLI_PATH}`, binaryName);
+
+    // Build command arguments
+    const args = [
+      'fix',
+      'sast',
+      sourceCodeDir,
+      '--results',
+      path.join(
+        workspaceDir,
+        'veracode_artifact_directory',
+        'results.json'
+      ),
+      '--async',
+      '--decouple',
+      'true',
+    ];
+
+    core.info('--------- Running inside fix for sast ---------');
+    // Conditionally add --remote flag (default: false)
+    const fixRemote = core.getInput('fix-remote');
+    if (fixRemote?.toLowerCase() === 'true') {
+      core.info(`remote argument appended`)
+      args.push('--remote');
+    }
+
+    return { hasChanges: true };
+  } catch (error) {
+    throw new Error(`Failed to run Fix for SCA: ${error.message}`);
+  }
+}
+
+module.exports = runFixSast;
+
+
+/***/ }),
+
 /***/ 35518:
 /***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
 
@@ -88662,12 +88713,6 @@ async function runFixSca(workspaceDir, actionPath, fixScaParams, sourceCodeDir) 
       '--decouple',
       'true',
     ];
-
-    // Conditionally add --transitive flag (default: true)
-    const fixTransitive = core.getInput('fix-transitive');
-    if (fixTransitive?.toLowerCase() !== 'false') {
-      args.push('--transitive');
-    }
 
     // Conditionally add --remote flag (default: false)
     const fixRemote = core.getInput('fix-remote');
@@ -145220,6 +145265,7 @@ const fs = __nccwpck_require__(79896);
 const path = __nccwpck_require__(16928);
 const setupAstGrep = __nccwpck_require__(21618);
 const runFixSca = __nccwpck_require__(35518);
+const runFixSast = __nccwpck_require__(13164);
 const createPr = __nccwpck_require__(98208);
 const uploadPrComment = __nccwpck_require__(70447);
 
@@ -145235,7 +145281,7 @@ async function main() {
 
     const workspaceDir = process.env.GITHUB_WORKSPACE;
     const statusFilePath = path.join(workspaceDir, 'source-code', 'sca-fix-status');
-    const actionPath = `${__dirname}/..`
+    const actionPath = `${__dirname}/..`;
     const sourceCodeDir = path.join(workspaceDir, 'source-code');
 
     core.info('Starting Veracode Fix for SCA action...');
@@ -145244,14 +145290,25 @@ async function main() {
     core.info('Setting up ast-grep...');
     await setupAstGrep(actionPath);
 
-    // Run Fix for SCA
-    core.info('Running Fix for SCA...');
-    const fixScaOutput = await runFixSca(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
-    
-    if (!fixScaOutput.hasChanges) {
-      core.info('No changes detected. Skipping PR creation.');
-      fs.writeFileSync(statusFilePath, 'NO_CHANGES_DETECTED', null, 2);
-      return;
+    // Determine if this is SAST or SCA fix
+    const isSastFix = fixScaParams && fixScaParams.includes('SAST-');
+    let fixOutput = null;
+
+    core.info('Running Fix for On the basis of comment...');
+    if (isSastFix) {
+      core.info('Running SAST Fix...');
+      fixOutput = await runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
+      core.info(`SAST Fix Result: ${JSON.stringify(fixOutput)}`);
+    } else {
+      core.info('Running Fix for SCA...');
+      fixOutput = await runFixSca(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
+      core.info(`SCA Fix Result: ${JSON.stringify(fixOutput)}`);
+
+      if (!fixOutput.hasChanges) {
+        core.info('No changes detected. Skipping PR creation.');
+        fs.writeFileSync(statusFilePath, 'NO_CHANGES_DETECTED', null, 2);
+        return;
+      }
     }
 
     // Create Pull Request
@@ -145275,7 +145332,7 @@ async function main() {
       githubApiUrl
     );
 
-    core.info('Veracode Fix for SCA action completed successfully.');
+    core.info('Veracode Fix action completed successfully.');
   } catch (error) {
     core.setFailed(error.message);
     process.exit(1);
