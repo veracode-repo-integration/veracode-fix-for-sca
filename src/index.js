@@ -39,8 +39,6 @@ async function main() {
     core.info('Setting up ast-grep...');
     await setupAstGrep(actionPath);
 
-    // Determine if this is SAST or SCA fix
-    const isSastFix = fixScaParams && fixScaParams.includes('SAST-');
     let fixOutput = null;
 
     core.info('Running Fix for On the basis of comment...');
