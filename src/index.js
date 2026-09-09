@@ -3,6 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const setupAstGrep = require('./setup-ast-grep');
 const runFixSca = require('./run-fix-sca');
+const runFixSast = require('./run-fix-sast');
 const createPr = require('./create-pr');
 const uploadPrComment = require('./upload-pr-comment');
 
@@ -27,6 +28,8 @@ async function main() {
     core.info('Setting up ast-grep...');
     await setupAstGrep(actionPath);
 
+    const result = await runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
+    core.info(`Result: ${JSON.stringify(result)}`);
     // Run Fix for SCA
     core.info('Running Fix for SCA...');
     const fixScaOutput = await runFixSca(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
