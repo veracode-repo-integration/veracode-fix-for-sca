@@ -16,6 +16,9 @@ async function main() {
     const githubApiUrl = core.getInput('github-api-url');
     const prNumber = core.getInput('pr-number');
     const fixScaParams = core.getInput('fix-sca-params');
+    core.info(`DEBUG: fixScaParams = "${fixScaParams}"`);
+    core.info(`DEBUG: includes SAST- ? ${fixScaParams && fixScaParams.includes('SAST-')}`);
+
 
     const workspaceDir = process.env.GITHUB_WORKSPACE;
     const statusFilePath = path.join(workspaceDir, 'source-code', 'sca-fix-status');
