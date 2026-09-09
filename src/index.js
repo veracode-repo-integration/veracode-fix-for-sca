@@ -15,6 +15,7 @@ async function main() {
     const branch = core.getInput('branch');
     const githubApiUrl = core.getInput('github-api-url');
     const prNumber = core.getInput('pr-number');
+    
     const fixScaParams = core.getInput('fix-sca-params');
     const fixSastParams = core.getInput('fix-sast-params');
     
@@ -23,6 +24,8 @@ async function main() {
     
     // Determine if this is SAST or SCA fix
     const isSastFix = fixSastParams && fixSastParams.includes('SAST-');
+    let paramsToUse = isSastFix ? fixSastParams : fixScaParams;
+
 
 
     const workspaceDir = process.env.GITHUB_WORKSPACE;
@@ -43,11 +46,10 @@ async function main() {
     core.info('Running Fix for On the basis of comment...');
     if (isSastFix) {
       core.info('Running SAST Fix...');
-      fixOutput = await runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
-      core.info(`SAST Fix Result: ${JSON.stringify(fixOutput)}`);
+      fixOutput = await runFixSast(workspaceDir, actionPath, paramsToUse, sourceCodeDir);
     } else {
       core.info('Running Fix for SCA...');
-      fixOutput = await runFixSca(workspaceDir, actionPath, fixScaParams, sourceCodeDir);
+      fixOutput = await runFixSca(workspaceDir, actionPath, paramsToUse, sourceCodeDir);
       core.info(`SCA Fix Result: ${JSON.stringify(fixOutput)}`);
 
       if (!fixOutput.hasChanges) {
