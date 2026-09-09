@@ -16,8 +16,13 @@ async function main() {
     const githubApiUrl = core.getInput('github-api-url');
     const prNumber = core.getInput('pr-number');
     const fixScaParams = core.getInput('fix-sca-params');
+    const fixSastParams = core.getInput('fix-sast-params');
+    
     core.info(`DEBUG: fixScaParams = "${fixScaParams}"`);
-    core.info(`DEBUG: includes SAST- ? ${fixScaParams && fixScaParams.includes('SAST-')}`);
+    core.info(`DEBUG: fixSastParams = "${fixSastParams}"`);
+    
+    // Determine if this is SAST or SCA fix
+    const isSastFix = fixSastParams && fixSastParams.includes('SAST-');
 
 
     const workspaceDir = process.env.GITHUB_WORKSPACE;
