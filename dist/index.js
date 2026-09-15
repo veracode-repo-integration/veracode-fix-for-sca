@@ -88642,7 +88642,7 @@ const exec = __nccwpck_require__(95236);
 
 async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir) {
   try {
-    // Read and log results.json for debugging
+    // Pass the downloaded SAST results from the GitHub workspace to the CLI.
     const resultsFilePath = path.join(workspaceDir, 'veracode_artifact_directory', 'results.json');
     if (fs.existsSync(resultsFilePath)) {
       const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
@@ -88689,6 +88689,50 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
     if (fixRemote?.toLowerCase() === 'true') {
       core.info(`remote argument appended`)
       args.push('--remote');
+    }
+
+    if (fixScaParams && fixScaParams.trim() && fixScaParams !== 'SAST-*') {
+      core.info(`Fix SAST params: ${fixScaParams}`);
+      args.push('-i', fixScaParams);
+    }
+
+    // @actions/exec forwards CLI stdout and stderr to the GitHub Actions log.
+    core.info(`Running: ${veracodeBinary} ${args.join(' ')}`);
+    await exec.exec(veracodeBinary, args, {
+      env: { ...process.env },
+      cwd: sourceCodeDir
+    });
+
+    let hasChanges = false;
+    let gitDiffOutput = '';
+
+    try {
+      await exec.exec('git', ['diff', '--name-only', 'HEAD'], {
+        cwd: sourceCodeDir,
+        listeners: {
+          stdout: (data) => {
+            gitDiffOutput += data.toString();
+          }
+        }
+      });
+
+      hasChanges = gitDiffOutput.trim().length > 0;
+    } catch (error) {
+      core.warning(`Failed to check git diff: ${error.message}`);
+    }
+
+    if (!hasChanges) {
+      core.info('No changes to existing files detected. Skipping branch creation and PR.');
+      return { hasChanges: false };
+    }
+
+    core.info('----- Git diff -----');
+    try {
+      await exec.exec('git', ['--no-pager', 'diff'], {
+        cwd: sourceCodeDir
+      });
+    } catch (error) {
+      core.warning(`Failed to show git diff: ${error.message}`);
     }
 
     return { hasChanges: true };
