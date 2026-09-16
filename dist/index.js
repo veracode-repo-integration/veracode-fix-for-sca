@@ -88684,7 +88684,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
         'results.json'
       ),
       // '--async',
-      '--decouple',
+      // '--decouple',
       'true',
     ];
 
