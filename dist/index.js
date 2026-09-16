@@ -88705,7 +88705,11 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
     core.info(`Running: ${veracodeBinary} ${args.join(' ')}`);
     await exec.exec(veracodeBinary, args, {
       env: { ...process.env },
-      cwd: sourceCodeDir
+      cwd: sourceCodeDir,
+      listeners: {
+        stdout: (data) => core.info(data.toString()),
+        stderr: (data) => core.warning(data.toString())
+      }
     });
 
     let hasChanges = false;
