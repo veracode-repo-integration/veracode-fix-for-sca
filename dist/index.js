@@ -88764,8 +88764,13 @@ async function runFixSca(workspaceDir, actionPath, fixScaParams, sourceCodeDir) 
   try {
     // Set up environment for veracode CLI
     const isWindows = process.platform === 'win32';
-    const binaryName = isWindows ? 'veracode.exe' : 'veracode';
-    const veracodeBinary = path.join(`${process.env.CLI_PATH}`, binaryName);
+    const binaryNames = isWindows ? ['veracode.exe'] : ['veracode', 'veracode-cli-linux'];
+    const veracodeBinary = binaryNames
+      .map((binaryName) => path.join(`${process.env.CLI_PATH}`, binaryName))
+      .find((binaryPath) => fs.existsSync(binaryPath));
+    if (!veracodeBinary) {
+      throw new Error(`Unable to locate Veracode CLI in ${process.env.CLI_PATH}`);
+    }
 
     // Build command arguments
     const args = [
