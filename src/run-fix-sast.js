@@ -49,6 +49,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       ),
       // '--async',
       // '--decouple',
+      // 'true',
     ];
 
     core.info('--------- Running inside fix for sast ---------');

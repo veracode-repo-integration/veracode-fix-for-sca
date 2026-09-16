@@ -145381,16 +145381,17 @@ async function main() {
     if (isSastFix) {
       core.info('Running SAST Fix...');
       fixOutput = await runFixSast(workspaceDir, actionPath, paramsToUse, sourceCodeDir);
+      core.info(`SAST Fix Result: ${JSON.stringify(fixOutput)}`);
     } else {
       core.info('Running Fix for SCA...');
       fixOutput = await runFixSca(workspaceDir, actionPath, paramsToUse, sourceCodeDir);
       core.info(`SCA Fix Result: ${JSON.stringify(fixOutput)}`);
+    }
 
-      if (!fixOutput.hasChanges) {
-        core.info('No changes detected. Skipping PR creation.');
-        fs.writeFileSync(statusFilePath, 'NO_CHANGES_DETECTED', null, 2);
-        return;
-      }
+    if (!fixOutput.hasChanges) {
+      core.info('No changes detected. Skipping PR creation.');
+      fs.writeFileSync(statusFilePath, 'NO_CHANGES_DETECTED', null, 2);
+      return;
     }
 
     // Create Pull Request
