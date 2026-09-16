@@ -88707,8 +88707,8 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       env: { ...process.env },
       cwd: sourceCodeDir,
       listeners: {
-        stdout: (data) => core.info(data.toString()),
-        stderr: (data) => core.warning(data.toString())
+        stdout: (data) => core.info(`CLI response: ${data.toString()}`),
+        stderr: (data) => core.warning(`CLI error: ${data.toString()}`)
       }
     });
 
