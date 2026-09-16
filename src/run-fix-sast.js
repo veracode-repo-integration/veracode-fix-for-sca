@@ -51,6 +51,16 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       // '--decouple',
       // 'true',
     ];
+    
+    const repositoryConfigPath = path.join(sourceCodeDir, 'veracode.yml');
+    if (fs.existsSync(repositoryConfigPath)) {
+      const cliConfigDir = path.join(os.homedir(), '.veracode');
+      fs.mkdirSync(cliConfigDir, { recursive: true });
+      fs.copyFileSync(repositoryConfigPath, path.join(cliConfigDir, 'veracode.yml'));
+      core.info(`Using Veracode configuration from ${repositoryConfigPath}`);
+    } else {
+      core.info(`No repository Veracode configuration found at ${repositoryConfigPath}`);
+    }
 
     core.info('--------- Running inside fix for sast ---------');
     // Conditionally add --remote flag (default: false)
