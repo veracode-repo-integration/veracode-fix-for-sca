@@ -62,7 +62,18 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       fs.copyFileSync(repositoryConfigPath, cliConfigPath);
       core.info(`CLI Veracode configuration present: ${fs.existsSync(cliConfigPath)}`);
     } else {
-      core.warning(`No Veracode configuration found at ${repositoryConfigPath}`);
+      core.info(`No Veracode configuration found at ${repositoryConfigPath}, generating from environment credentials`);
+      const apiId = process.env.VERACODE_API_KEY_ID;
+      const apiKey = process.env.VERACODE_API_KEY_SECRET;
+      if (apiId && apiKey) {
+        const cliConfigDir = path.dirname(cliConfigPath);
+        fs.mkdirSync(cliConfigDir, { recursive: true });
+        const configContent = `credentials:\n  api_id: "${apiId}"\n  api_key: "${apiKey}"\n`;
+        fs.writeFileSync(cliConfigPath, configContent, { mode: 0o600 });
+        core.info(`Generated CLI Veracode configuration at ${cliConfigPath}`);
+      } else {
+        core.warning(`VERACODE_API_KEY_ID or VERACODE_API_KEY_SECRET not set in environment`);
+      }
     }
 
     core.info('--------- Running inside fix for sast ---------');
