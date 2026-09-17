@@ -88698,7 +88698,85 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       fs.copyFileSync(repositoryConfigPath, cliConfigPath);
       core.info(`CLI Veracode configuration present: ${fs.existsSync(cliConfigPath)}`);
     } else {
-      core.info(`No Veracode configuration found at ${repositoryConfigPath}`);
+      core.info(`No Veracode configuration found at ${repositoryConfigPath}, writing default config`);
+      const cliConfigDir = path.dirname(cliConfigPath);
+      fs.mkdirSync(cliConfigDir, { recursive: true });
+      const defaultConfig = `veracode_static_scan:
+  push:
+    trigger: true
+    branches_to_run:
+      - '*'
+    branches_to_exclude:
+  pull_request:
+    trigger: true
+    action:
+      - opened
+      - synchronize
+    target_branch:
+      - default_branch
+  analysis_on_platform: true
+  break_build_policy_findings: true
+  break_build_invalid_policy: true
+  break_build_on_error: false
+  error_message: "Veracode static scan faced a problem. Please contact your Veracode administrator for more information."
+  policy: 'Veracode Recommended Medium + SCA'
+  create_code_scanning_alert: false
+  create_issue: false
+  issues:
+    trigger: true
+    commands:
+      - "Veracode Static Scan"
+  fix_for_sast:
+    pull_request:
+      trigger: true
+
+veracode_sca_scan:
+  push:
+    trigger: true
+    branches_to_run:
+      - '*'
+    branches_to_exclude:
+  pull_request:
+    trigger: true
+    action:
+      - opened
+      - synchronize
+    target_branch:
+      - default_branch
+  fix_for_sca:
+    pull_request:
+      trigger: true
+  break_build_on_error: true
+  break_build_policy_findings: true
+  error_message: "Veracode SCA scan faced a problem. Please contact your Veracode administrator for more information."
+  issues:
+    trigger: false
+    commands:
+      - "Veracode SCA Scan"
+
+veracode_iac_secrets_scan:
+  push:
+    trigger: true
+    branches_to_run:
+      - '*'
+    branches_to_exclude:
+  pull_request:
+    trigger: true
+    action:
+      - opened
+      - synchronize
+    target_branch:
+      - default_branch
+  break_build_policy_findings: true
+  break_build_on_error: true
+  error_message: "Veracode IAC secrets scan faced a problem. Please contact your Veracode administrator for more information."
+  issues:
+    trigger: false
+    commands:
+      - "Veracode IAC Scan"
+`;
+      fs.writeFileSync(cliConfigPath, defaultConfig);
+      core.info(`Default Veracode configuration written to ${cliConfigPath}`);
     }
 
     const credentialsPath = path.join(os.homedir(), '.veracode', 'credentials');
