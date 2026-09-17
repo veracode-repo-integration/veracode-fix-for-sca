@@ -88689,11 +88689,14 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
     ];
     
     const repositoryConfigPath = path.join(sourceCodeDir, 'veracode.yml');
+    const cliConfigPath = path.join(os.homedir(), '.veracode', 'veracode.yml');
+    core.info(`Checking repository Veracode configuration: ${repositoryConfigPath}`);
+    core.info(`Repository Veracode configuration present: ${fs.existsSync(repositoryConfigPath)}`);
     if (fs.existsSync(repositoryConfigPath)) {
-      const cliConfigDir = path.join(os.homedir(), '.veracode');
+      const cliConfigDir = path.dirname(cliConfigPath);
       fs.mkdirSync(cliConfigDir, { recursive: true });
-      fs.copyFileSync(repositoryConfigPath, path.join(cliConfigDir, 'veracode.yml'));
-      core.info(`Using Veracode configuration from ${repositoryConfigPath}`);
+      fs.copyFileSync(repositoryConfigPath, cliConfigPath);
+      core.info(`CLI Veracode configuration present: ${fs.existsSync(cliConfigPath)}`);
     } else {
       core.info(`No repository Veracode configuration found at ${repositoryConfigPath}`);
     }
@@ -88717,8 +88720,11 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       env: { ...process.env },
       cwd: sourceCodeDir,
       listeners: {
-        stdout: (data) => core.info(`CLI response: ${data.toString()}`),
-        stderr: (data) => core.warning(`CLI error: ${data.toString()}`)
+        stdout: (data) => core.debug(`CLI stdout chunk: ${data.toString()}`),
+        stderr: (data) => core.debug(`CLI stderr chunk: ${data.toString()}`),
+        stdline: (line) => core.info(`CLI response: ${line}`),
+        errline: (line) => core.warning(`CLI error: ${line}`),
+        debug: (message) => core.debug(`CLI debug: ${message}`)
       }
     });
 
