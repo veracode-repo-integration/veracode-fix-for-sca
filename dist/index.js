@@ -88690,20 +88690,20 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
     core.info(`Checking repository Veracode configuration: ${repositoryConfigPath}`);
     core.info(`Repository Veracode configuration present: ${fs.existsSync(repositoryConfigPath)}`);
 
-    // const credentialsPath = path.join(os.homedir(), '.veracode', 'credentials');
-    // if (!fs.existsSync(credentialsPath)) {
-    //   const apiId = process.env.VERACODE_API_KEY_ID;
-    //   const apiKey = process.env.VERACODE_API_KEY_SECRET;
-    //   if (apiId && apiKey) {
-    //     const credentialsDir = path.dirname(credentialsPath);
-    //     fs.mkdirSync(credentialsDir, { recursive: true });
-    //     const credentialsContent = `[default]\nveracode_api_key_id = ${apiId}\nveracode_api_key_secret = ${apiKey}\n`;
-    //     fs.writeFileSync(credentialsPath, credentialsContent, { mode: 0o600 });
-    //     core.info(`Generated Veracode credentials file at ${credentialsPath}`);
-    //   } else {
-    //     core.warning(`VERACODE_API_KEY_ID or VERACODE_API_KEY_SECRET not set in environment`);
-    //   }
-    // }
+    const credentialsPath = path.join(os.homedir(), '.veracode', 'credentials');
+    if (!fs.existsSync(credentialsPath)) {
+      const apiId = process.env.VERACODE_API_KEY_ID;
+      const apiKey = process.env.VERACODE_API_KEY_SECRET;
+      if (apiId && apiKey) {
+        const credentialsDir = path.dirname(credentialsPath);
+        fs.mkdirSync(credentialsDir, { recursive: true });
+        const credentialsContent = `[default]\nveracode_api_key_id = ${apiId}\nveracode_api_key_secret = ${apiKey}\n`;
+        fs.writeFileSync(credentialsPath, credentialsContent, { mode: 0o600 });
+        core.info(`Generated Veracode credentials file at ${credentialsPath}`);
+      } else {
+        core.warning(`VERACODE_API_KEY_ID or VERACODE_API_KEY_SECRET not set in environment`);
+      }
+    }
 
     core.info('--------- Running inside fix for sast ---------');
     // Conditionally add --remote flag (default: false)
