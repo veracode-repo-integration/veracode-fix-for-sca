@@ -45,7 +45,7 @@ async function main() {
     if (isSastFix) {
       core.info('Running SAST Fix...');
       fixOutput = await runFixSast(workspaceDir, actionPath, paramsToUse, sourceCodeDir);
-      core.info(`SAST Fix Result: ${JSON.stringify(fixOutput)}`);
+      core.info(`SAST Fix Result: hasChanges=${fixOutput.hasChanges}, hasBatchResponse=${!!fixOutput.batchFixResponse}`);
     } else {
       core.info('Running Fix for SCA...');
       fixOutput = await runFixSca(workspaceDir, actionPath, paramsToUse, sourceCodeDir);
@@ -55,6 +55,11 @@ async function main() {
     if (!fixOutput.hasChanges) {
       core.info('No changes detected. Skipping PR creation.');
       fs.writeFileSync(statusFilePath, 'NO_CHANGES_DETECTED', null, 2);
+      // For SAST: still upload the batch response artifact so veracode-github-app
+      // can post a "no changes" comment with detailed per-flaw outcomes.
+      if (isSastFix && fixOutput.batchFixResponse) {
+        await uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, fixOutput.batchFixResponse);
+      }
       return;
     }
 
@@ -66,7 +71,8 @@ async function main() {
       branch,
       githubToken,
       githubApiUrl,
-      sourceCodeDir
+      sourceCodeDir,
+      isSastFix ? fixOutput.batchFixResponse : null
     );
 
     // Post PR comment on original PR
@@ -76,7 +82,8 @@ async function main() {
       repository,
       prNumber,
       githubToken,
-      githubApiUrl
+      githubApiUrl,
+      isSastFix ? fixOutput.batchFixResponse : null
     );
 
     core.info('Veracode Fix action completed successfully.');

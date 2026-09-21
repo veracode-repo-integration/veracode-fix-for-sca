@@ -84,17 +84,58 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
 
     // @actions/exec forwards CLI stdout and stderr to the GitHub Actions log.
     core.info(`Running: ${veracodeBinary} ${args.join(' ')}`);
+    const allStdLines = [];
     await exec.exec(veracodeBinary, args, {
       env: { ...process.env },
       cwd: sourceCodeDir,
       listeners: {
         stdout: (data) => core.debug(`CLI stdout chunk: ${data.toString()}`),
         stderr: (data) => core.debug(`CLI stderr chunk: ${data.toString()}`),
-        stdline: (line) => core.info(`CLI response: ${line}`),
+        stdline: (line) => {
+          core.info(`CLI response: ${line}`);
+          allStdLines.push(line);
+        },
         errline: (line) => core.warning(`CLI error: ${line}`),
         debug: (message) => core.debug(`CLI debug: ${message}`)
       }
     });
+
+    // Extract the JSON batch fix response from CLI stdout.
+    // The CLI prints structured log lines followed by a JSON object block.
+    let batchFixResponse = null;
+    try {
+      const fullOutput = allStdLines.join('\n');
+      // Find the first line that is exactly '{' — start of the JSON block
+      const jsonStart = fullOutput.search(/(^|\n)\{/);
+      if (jsonStart !== -1) {
+        const jsonStr = fullOutput.substring(fullOutput.indexOf('{', jsonStart));
+        // Walk character by character to find the balanced closing brace
+        let depth = 0;
+        let jsonEnd = -1;
+        for (let i = 0; i < jsonStr.length; i++) {
+          if (jsonStr[i] === '{') depth++;
+          else if (jsonStr[i] === '}') {
+            depth--;
+            if (depth === 0) { jsonEnd = i + 1; break; }
+          }
+        }
+        if (jsonEnd > 0) {
+          const parsed = JSON.parse(jsonStr.substring(0, jsonEnd));
+          // CLI wraps the batch response in { fixSessionId, patch }
+          batchFixResponse = parsed.patch || parsed;
+          const responseDir = path.join(workspaceDir, 'veracode_artifact_directory');
+          fs.mkdirSync(responseDir, { recursive: true });
+          const responseFilePath = path.join(responseDir, 'sast-fix-batch-response.json');
+          fs.writeFileSync(responseFilePath, JSON.stringify(batchFixResponse, null, 2));
+          core.info(`CLI batch fix response saved to ${responseFilePath}`);
+        }
+      }
+      if (!batchFixResponse) {
+        core.warning('Could not find JSON block in CLI stdout. Batch fix response will be unavailable.');
+      }
+    } catch (parseError) {
+      core.warning(`Failed to parse CLI batch fix response: ${parseError.message}`);
+    }
 
     let hasChanges = false;
     let gitDiffOutput = '';
@@ -116,7 +157,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
 
     if (!hasChanges) {
       core.info('No changes to existing files detected. Skipping branch creation and PR.');
-      return { hasChanges: false };
+      return { hasChanges: false, batchFixResponse };
     }
 
     core.info('----- Git diff -----');
@@ -128,7 +169,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to show git diff: ${error.message}`);
     }
 
-    return { hasChanges: true };
+    return { hasChanges: true, batchFixResponse };
   } catch (error) {
     throw new Error(`Failed to run Fix for SAST: ${error.message}`);
   }
