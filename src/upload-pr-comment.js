@@ -5,7 +5,7 @@ const exec = require('@actions/exec');
 const github = require('@actions/github');
 const { DefaultArtifactClient } = require('@actions/artifact');
 
-async function uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, batchFixResponse = null, severityMap = null) {
+async function uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, batchFixResponse = null, severityMap = null, fixIdMap = null) {
   try {
     // Parse repository string (format: owner/repo)
     const [owner, repo] = repository.split('/');
@@ -61,7 +61,8 @@ async function uploadPrComment(workspaceDir, repository, prNumber, githubToken, 
         batch_fix_response: batchFixResponse,
         fix_pr_number: fixPrNumber,
         fix_pr_url: fixPrUrl,
-        ...(severityMap && { severity_map: severityMap })
+        ...(severityMap && { severity_map: severityMap }),
+        ...(fixIdMap && { fix_id_map: fixIdMap })
       })
     };
 

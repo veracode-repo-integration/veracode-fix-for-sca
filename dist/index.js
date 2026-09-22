@@ -88882,14 +88882,18 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to check git diff: ${error.message}`);
     }
 
-    // Read severity mapping from results.json if available
+    // Read severity mapping and fix_id mapping from results.json if available
     let severityMap = {};
+    let fixIdMap = {};
     try {
       const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
       const resultsJson = JSON.parse(resultsContent);
       if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
         resultsJson.findings.forEach(finding => {
           const cweId = finding.cwe_id ? `CWE-${finding.cwe_id}` : null;
+          const issueId = finding.issue_id;
+          const fixId = finding.fix_id;
+
           if (cweId && !severityMap[cweId]) {
             // Map severity level to string
             const severityValue = finding.severity || 3;
@@ -88901,6 +88905,15 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
             else if (severityValue === 1) severityText = 'Informational';
             severityMap[cweId] = severityText;
           }
+
+          if (issueId && fixId) {
+            if (!fixIdMap[issueId]) {
+              fixIdMap[issueId] = [];
+            }
+            if (!fixIdMap[issueId].includes(fixId)) {
+              fixIdMap[issueId].push(fixId);
+            }
+          }
         });
       }
     } catch (error) {
@@ -88909,7 +88922,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
 
     if (!hasChanges) {
       core.info('No changes to existing files detected. Skipping branch creation and PR.');
-      return { hasChanges: false, batchFixResponse, severityMap };
+      return { hasChanges: false, batchFixResponse, severityMap, fixIdMap };
     }
 
     core.info('----- Git diff -----');
@@ -88921,7 +88934,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to show git diff: ${error.message}`);
     }
 
-    return { hasChanges: true, batchFixResponse, severityMap };
+    return { hasChanges: true, batchFixResponse, severityMap, fixIdMap };
   } catch (error) {
     throw new Error(`Failed to run Fix for SAST: ${error.message}`);
   }
@@ -89120,7 +89133,7 @@ const exec = __nccwpck_require__(95236);
 const github = __nccwpck_require__(93228);
 const { DefaultArtifactClient } = __nccwpck_require__(76846);
 
-async function uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, batchFixResponse = null, severityMap = null) {
+async function uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, batchFixResponse = null, severityMap = null, fixIdMap = null) {
   try {
     // Parse repository string (format: owner/repo)
     const [owner, repo] = repository.split('/');
@@ -89176,7 +89189,8 @@ async function uploadPrComment(workspaceDir, repository, prNumber, githubToken, 
         batch_fix_response: batchFixResponse,
         fix_pr_number: fixPrNumber,
         fix_pr_url: fixPrUrl,
-        ...(severityMap && { severity_map: severityMap })
+        ...(severityMap && { severity_map: severityMap }),
+        ...(fixIdMap && { fix_id_map: fixIdMap })
       })
     };
 
@@ -145679,7 +145693,7 @@ async function main() {
       // For SAST: still upload the batch response artifact so veracode-github-app
       // can post a "no changes" comment with detailed per-flaw outcomes.
       if (isSastFix && fixOutput.batchFixResponse) {
-        await uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, fixOutput.batchFixResponse, fixOutput.severityMap);
+        await uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, fixOutput.batchFixResponse, fixOutput.severityMap, fixOutput.fixIdMap);
       }
       return;
     }
@@ -145705,7 +145719,8 @@ async function main() {
       githubToken,
       githubApiUrl,
       isSastFix ? fixOutput.batchFixResponse : null,
-      isSastFix ? fixOutput.severityMap : null
+      isSastFix ? fixOutput.severityMap : null,
+      isSastFix ? fixOutput.fixIdMap : null
     );
 
     core.info('Veracode Fix action completed successfully.');
