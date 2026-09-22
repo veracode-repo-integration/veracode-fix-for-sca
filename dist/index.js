@@ -88859,7 +88859,6 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
             if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
               resultsJson.findings.forEach(finding => {
                 const issueId = finding.issue_id;
-                core.info(`Mapping issueId ${issueId} to fix_id ${finding.fix_id} and severity ${finding.severity}`);
                 const fixId = finding.fix_id || 'N/A';
                 const severityValue = finding.severity || 3;
                 let severityText = 'Medium';
@@ -88871,6 +88870,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
 
                 if (issueId) {
                   findingsMap[issueId] = { fix_id: fixId, severity: severityText };
+                  core.info(`Mapped issueId ${issueId} → fix_id: ${fixId}, severity: ${severityText}`);
                 }
               });
             }
@@ -88880,11 +88880,15 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
 
           // Append fix_id and severity to each flaw
           if (batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
+            core.info(`Findings map keys: ${Object.keys(findingsMap).join(', ')}`);
             batchFixResponse.flaws.forEach(flaw => {
               core.info(`Processing flaw with issueId ${flaw.issueId}`);
               if (findingsMap[flaw.issueId]) {
                 flaw.fix_id = findingsMap[flaw.issueId].fix_id;
                 flaw.severity = findingsMap[flaw.issueId].severity;
+                core.info(`✓ Added fix_id: ${flaw.fix_id}, severity: ${flaw.severity}`);
+              } else {
+                core.info(`✗ No mapping found for issueId ${flaw.issueId}`);
               }
             });
           }
