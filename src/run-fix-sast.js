@@ -124,14 +124,15 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
           // CLI wraps the batch response in { fixSessionId, patch }
           batchFixResponse = parsed.patch || parsed;
 
-          // Build a map of issueId to {fix_id, severity} from results.json
+          // Build a map of file:line to {fix_id, severity} from results.json
           const findingsMap = {};
           try {
             const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
             const resultsJson = JSON.parse(resultsContent);
             if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
               resultsJson.findings.forEach(finding => {
-                const issueId = finding.issue_id;
+                const filePath = finding.files?.source_file?.file || finding.path;
+                const line = finding.line;
                 const fixId = finding.fix_id || 'N/A';
                 const severityValue = finding.severity || 3;
                 let severityText = 'Medium';
@@ -141,9 +142,10 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
                 else if (severityValue === 2) severityText = 'Low';
                 else if (severityValue === 1) severityText = 'Informational';
 
-                if (issueId) {
-                  findingsMap[issueId] = { fix_id: fixId, severity: severityText };
-                  core.info(`Mapped issueId ${issueId} → fix_id: ${fixId}, severity: ${severityText}`);
+                if (filePath && line) {
+                  const key = `${filePath}:${line}`;
+                  findingsMap[key] = { fix_id: fixId, severity: severityText };
+                  core.info(`Mapped ${key} → fix_id: ${fixId}, severity: ${severityText}`);
                 }
               });
             }
@@ -155,13 +157,14 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
           if (batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
             core.info(`Findings map keys: ${Object.keys(findingsMap).join(', ')}`);
             batchFixResponse.flaws.forEach(flaw => {
-              core.info(`Processing flaw with issueId ${flaw.issueId}`);
-              if (findingsMap[flaw.issueId]) {
-                flaw.fix_id = findingsMap[flaw.issueId].fix_id;
-                flaw.severity = findingsMap[flaw.issueId].severity;
+              const flawKey = `${flaw.path}:${flaw.line}`;
+              core.info(`Processing flaw: ${flawKey} (issueId: ${flaw.issueId})`);
+              if (findingsMap[flawKey]) {
+                flaw.fix_id = findingsMap[flawKey].fix_id;
+                flaw.severity = findingsMap[flawKey].severity;
                 core.info(`✓ Added fix_id: ${flaw.fix_id}, severity: ${flaw.severity}`);
               } else {
-                core.info(`✗ No mapping found for issueId ${flaw.issueId}`);
+                core.info(`✗ No mapping found for ${flawKey}`);
               }
             });
           }
