@@ -129,8 +129,14 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
           try {
             const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
             const resultsJson = JSON.parse(resultsContent);
+            core.info(`Results JSON structure: ${JSON.stringify(resultsJson, null, 2).substring(0, 500)}`);
+
             if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
-              resultsJson.findings.forEach(finding => {
+              core.info(`Found ${resultsJson.findings.length} findings`);
+              resultsJson.findings.forEach((finding, idx) => {
+                if (idx === 0) {
+                  core.info(`First finding structure: ${JSON.stringify(finding, null, 2).substring(0, 500)}`);
+                }
                 const filePath = finding.files?.source_file?.file || finding.path;
                 const line = finding.line;
                 const fixId = finding.fix_id || 'N/A';
@@ -142,12 +148,17 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
                 else if (severityValue === 2) severityText = 'Low';
                 else if (severityValue === 1) severityText = 'Informational';
 
+                core.info(`Finding ${idx}: path=${filePath}, line=${line}, fixId=${fixId}`);
                 if (filePath && line) {
                   const key = `${filePath}:${line}`;
                   findingsMap[key] = { fix_id: fixId, severity: severityText };
-                  core.info(`Mapped ${key} → fix_id: ${fixId}, severity: ${severityText}`);
+                  core.info(`✓ Mapped ${key} → fix_id: ${fixId}, severity: ${severityText}`);
+                } else {
+                  core.info(`✗ Skipped finding ${idx}: missing filePath or line`);
                 }
               });
+            } else {
+              core.warn(`No findings array in results.json`);
             }
           } catch (mapError) {
             core.warn(`Unable to build findings map: ${mapError.message}`);
