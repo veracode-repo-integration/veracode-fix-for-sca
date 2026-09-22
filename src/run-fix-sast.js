@@ -11,17 +11,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
     if (fs.existsSync(resultsFilePath)) {
       const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
       const resultsJson = JSON.parse(resultsContent);
-      
-      core.info('========== SAST Results with Fix IDs ==========');
-      if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
-        core.info(`Total findings: ${resultsJson.findings.length}`);
-        resultsJson.findings.forEach((finding, index) => {
-          const fileName = finding.files?.source_file?.file || 'Unknown';
-          const fixId = finding.fix_id || 'N/A';
-          core.info(`[${index + 1}] Fix ID: ${fixId} | File: ${fileName}`);
-        });
-      }
-      core.info('============================================');
+      core.info(`SAST results.json loaded ${JSON.stringify(resultsJson, null, 2)}`);
     } else {
       core.warn(`Results file not found at: ${resultsFilePath}`);
     }
@@ -49,10 +39,6 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       // '--decouple',
       // 'true',
     ];
-    
-    const repositoryConfigPath = path.join(workspaceDir, 'veracode.yml');
-    core.info(`Checking repository Veracode configuration: ${repositoryConfigPath}`);
-    core.info(`Repository Veracode configuration present: ${fs.existsSync(repositoryConfigPath)}`);
 
     const credentialsPath = path.join(os.homedir(), '.veracode', 'credentials');
     if (!fs.existsSync(credentialsPath)) {
@@ -63,7 +49,6 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
         fs.mkdirSync(credentialsDir, { recursive: true });
         const credentialsContent = `[default]\nveracode_api_key_id = ${apiId}\nveracode_api_key_secret = ${apiKey}\n`;
         fs.writeFileSync(credentialsPath, credentialsContent, { mode: 0o600 });
-        core.info(`Generated Veracode credentials file at ${credentialsPath}`);
       } else {
         core.warning(`VERACODE_API_KEY_ID or VERACODE_API_KEY_SECRET not set in environment`);
       }
@@ -76,11 +61,6 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.info(`remote argument appended`)
       args.push('--remote');
     }
-
-    // if (fixScaParams && fixScaParams.trim() && fixScaParams !== 'SAST-*') {
-    //   core.info(`Fix SAST params: ${fixScaParams}`);
-    //   args.push('-i', fixScaParams);
-    // }
 
     // @actions/exec forwards CLI stdout and stderr to the GitHub Actions log.
     core.info(`Running: ${veracodeBinary} ${args.join(' ')}`);
@@ -132,7 +112,6 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
             const resultsJson = JSON.parse(resultsContent);
 
             if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
-              core.info(`Found ${resultsJson.findings.length} findings in results.json`);
               resultsJson.findings.forEach((finding, idx) => {
                 const filePath = finding.files?.source_file?.file || finding.path || '';
                 const cweId = finding.cwe_id || 'unknown';
@@ -148,27 +127,11 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
                 const key = `${cweId}:${filePath}:${severityValue}`;
                 findingsMap[key] = { fix_id: fixId, severity: severityText };
               });
-              core.info(`Built findingsMap with ${Object.keys(findingsMap).length} unique findings`);
             } else {
               core.warn(`No findings array in results.json`);
             }
           } catch (mapError) {
             core.warn(`Unable to build findings map: ${mapError.message}`);
-          }
-
-          // Append fix_id and severity to each flaw by matching cwe_id:path:severity
-          if (batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
-            batchFixResponse.flaws.forEach(flaw => {
-              const flawKey = `${flaw.cweId}:${flaw.path}:${flaw.severity}`;
-              const match = findingsMap[flawKey];
-              if (match) {
-                flaw.fix_id = match.fix_id;
-                flaw.severity = findingsMap[flawKey].severity;
-                core.info(`✓ issueId ${flaw.issueId}: fix_id=${flaw.fix_id}, severity=${flaw.severity}`);
-              } else {
-                core.debug(`No mapping for ${flawKey} (issueId: ${flaw.issueId})`);
-              }
-            });
           }
 
           core.info(`Batch fix response: ${JSON.stringify(batchFixResponse, null, 2)}`);
