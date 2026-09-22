@@ -162,6 +162,8 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
             });
           }
 
+          core.info(`Batch fix response: ${JSON.stringify(batchFixResponse, null, 2)}`);
+
           const responseDir = path.join(workspaceDir, 'veracode_artifact_directory');
           fs.mkdirSync(responseDir, { recursive: true });
           const responseFilePath = path.join(responseDir, 'sast-fix-batch-response.json');
