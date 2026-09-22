@@ -88851,21 +88851,18 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
           // CLI wraps the batch response in { fixSessionId, patch }
           batchFixResponse = parsed.patch || parsed;
 
-          // Build a map of file:line to {fix_id, severity} from results.json
+          // Build a map of cwe_id:path:severity to {fix_id} from results.json
+          // (Line numbers not available in results.json, so use CWE + path + severity)
           const findingsMap = {};
           try {
             const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
             const resultsJson = JSON.parse(resultsContent);
-            core.info(`Results JSON structure: ${JSON.stringify(resultsJson, null, 2).substring(0, 500)}`);
 
             if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
-              core.info(`Found ${resultsJson.findings.length} findings`);
+              core.info(`Found ${resultsJson.findings.length} findings in results.json`);
               resultsJson.findings.forEach((finding, idx) => {
-                if (idx === 0) {
-                  core.info(`First finding structure: ${JSON.stringify(finding, null, 2).substring(0, 500)}`);
-                }
-                const filePath = finding.files?.source_file?.file || finding.path;
-                const line = finding.line;
+                const filePath = finding.files?.source_file?.file || finding.path || '';
+                const cweId = finding.cwe_id || 'unknown';
                 const fixId = finding.fix_id || 'N/A';
                 const severityValue = finding.severity || 3;
                 let severityText = 'Medium';
@@ -88875,15 +88872,10 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
                 else if (severityValue === 2) severityText = 'Low';
                 else if (severityValue === 1) severityText = 'Informational';
 
-                core.info(`Finding ${idx}: path=${filePath}, line=${line}, fixId=${fixId}`);
-                if (filePath && line) {
-                  const key = `${filePath}:${line}`;
-                  findingsMap[key] = { fix_id: fixId, severity: severityText };
-                  core.info(`✓ Mapped ${key} → fix_id: ${fixId}, severity: ${severityText}`);
-                } else {
-                  core.info(`✗ Skipped finding ${idx}: missing filePath or line`);
-                }
+                const key = `${cweId}:${filePath}:${severityValue}`;
+                findingsMap[key] = { fix_id: fixId, severity: severityText };
               });
+              core.info(`Built findingsMap with ${Object.keys(findingsMap).length} unique findings`);
             } else {
               core.warn(`No findings array in results.json`);
             }
@@ -88891,18 +88883,17 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
             core.warn(`Unable to build findings map: ${mapError.message}`);
           }
 
-          // Append fix_id and severity to each flaw
+          // Append fix_id and severity to each flaw by matching cwe_id:path:severity
           if (batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
-            core.info(`Findings map keys: ${Object.keys(findingsMap).join(', ')}`);
             batchFixResponse.flaws.forEach(flaw => {
-              const flawKey = `${flaw.path}:${flaw.line}`;
-              core.info(`Processing flaw: ${flawKey} (issueId: ${flaw.issueId})`);
-              if (findingsMap[flawKey]) {
-                flaw.fix_id = findingsMap[flawKey].fix_id;
+              const flawKey = `${flaw.cweId}:${flaw.path}:${flaw.severity}`;
+              const match = findingsMap[flawKey];
+              if (match) {
+                flaw.fix_id = match.fix_id;
                 flaw.severity = findingsMap[flawKey].severity;
-                core.info(`✓ Added fix_id: ${flaw.fix_id}, severity: ${flaw.severity}`);
+                core.info(`✓ issueId ${flaw.issueId}: fix_id=${flaw.fix_id}, severity=${flaw.severity}`);
               } else {
-                core.info(`✗ No mapping found for ${flawKey}`);
+                core.debug(`No mapping for ${flawKey} (issueId: ${flaw.issueId})`);
               }
             });
           }
