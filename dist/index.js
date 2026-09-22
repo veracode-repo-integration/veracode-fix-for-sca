@@ -88882,9 +88882,34 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to check git diff: ${error.message}`);
     }
 
+    // Read severity mapping from results.json if available
+    let severityMap = {};
+    try {
+      const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
+      const resultsJson = JSON.parse(resultsContent);
+      if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
+        resultsJson.findings.forEach(finding => {
+          const cweId = finding.cwe_id ? `CWE-${finding.cwe_id}` : null;
+          if (cweId && !severityMap[cweId]) {
+            // Map severity level to string
+            const severityValue = finding.severity || 3;
+            let severityText = 'Medium';
+            if (severityValue === 5) severityText = 'Very High';
+            else if (severityValue === 4) severityText = 'High';
+            else if (severityValue === 3) severityText = 'Medium';
+            else if (severityValue === 2) severityText = 'Low';
+            else if (severityValue === 1) severityText = 'Informational';
+            severityMap[cweId] = severityText;
+          }
+        });
+      }
+    } catch (error) {
+      core.warn(`Unable to read severity mapping from results.json: ${error.message}`);
+    }
+
     if (!hasChanges) {
       core.info('No changes to existing files detected. Skipping branch creation and PR.');
-      return { hasChanges: false, batchFixResponse };
+      return { hasChanges: false, batchFixResponse, severityMap };
     }
 
     core.info('----- Git diff -----');
@@ -88896,7 +88921,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to show git diff: ${error.message}`);
     }
 
-    return { hasChanges: true, batchFixResponse };
+    return { hasChanges: true, batchFixResponse, severityMap };
   } catch (error) {
     throw new Error(`Failed to run Fix for SAST: ${error.message}`);
   }
@@ -89095,7 +89120,7 @@ const exec = __nccwpck_require__(95236);
 const github = __nccwpck_require__(93228);
 const { DefaultArtifactClient } = __nccwpck_require__(76846);
 
-async function uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, batchFixResponse = null) {
+async function uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, batchFixResponse = null, severityMap = null) {
   try {
     // Parse repository string (format: owner/repo)
     const [owner, repo] = repository.split('/');
@@ -89150,7 +89175,8 @@ async function uploadPrComment(workspaceDir, repository, prNumber, githubToken, 
       ...(batchFixResponse && {
         batch_fix_response: batchFixResponse,
         fix_pr_number: fixPrNumber,
-        fix_pr_url: fixPrUrl
+        fix_pr_url: fixPrUrl,
+        ...(severityMap && { severity_map: severityMap })
       })
     };
 
@@ -145653,7 +145679,7 @@ async function main() {
       // For SAST: still upload the batch response artifact so veracode-github-app
       // can post a "no changes" comment with detailed per-flaw outcomes.
       if (isSastFix && fixOutput.batchFixResponse) {
-        await uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, fixOutput.batchFixResponse);
+        await uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, fixOutput.batchFixResponse, fixOutput.severityMap);
       }
       return;
     }
@@ -145678,7 +145704,8 @@ async function main() {
       prNumber,
       githubToken,
       githubApiUrl,
-      isSastFix ? fixOutput.batchFixResponse : null
+      isSastFix ? fixOutput.batchFixResponse : null,
+      isSastFix ? fixOutput.severityMap : null
     );
 
     core.info('Veracode Fix action completed successfully.');

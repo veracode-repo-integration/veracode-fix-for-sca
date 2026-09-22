@@ -58,7 +58,7 @@ async function main() {
       // For SAST: still upload the batch response artifact so veracode-github-app
       // can post a "no changes" comment with detailed per-flaw outcomes.
       if (isSastFix && fixOutput.batchFixResponse) {
-        await uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, fixOutput.batchFixResponse);
+        await uploadPrComment(workspaceDir, repository, prNumber, githubToken, githubApiUrl, fixOutput.batchFixResponse, fixOutput.severityMap);
       }
       return;
     }
@@ -83,7 +83,8 @@ async function main() {
       prNumber,
       githubToken,
       githubApiUrl,
-      isSastFix ? fixOutput.batchFixResponse : null
+      isSastFix ? fixOutput.batchFixResponse : null,
+      isSastFix ? fixOutput.severityMap : null
     );
 
     core.info('Veracode Fix action completed successfully.');

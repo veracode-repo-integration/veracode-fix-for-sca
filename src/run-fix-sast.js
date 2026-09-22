@@ -155,9 +155,34 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to check git diff: ${error.message}`);
     }
 
+    // Read severity mapping from results.json if available
+    let severityMap = {};
+    try {
+      const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
+      const resultsJson = JSON.parse(resultsContent);
+      if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
+        resultsJson.findings.forEach(finding => {
+          const cweId = finding.cwe_id ? `CWE-${finding.cwe_id}` : null;
+          if (cweId && !severityMap[cweId]) {
+            // Map severity level to string
+            const severityValue = finding.severity || 3;
+            let severityText = 'Medium';
+            if (severityValue === 5) severityText = 'Very High';
+            else if (severityValue === 4) severityText = 'High';
+            else if (severityValue === 3) severityText = 'Medium';
+            else if (severityValue === 2) severityText = 'Low';
+            else if (severityValue === 1) severityText = 'Informational';
+            severityMap[cweId] = severityText;
+          }
+        });
+      }
+    } catch (error) {
+      core.warn(`Unable to read severity mapping from results.json: ${error.message}`);
+    }
+
     if (!hasChanges) {
       core.info('No changes to existing files detected. Skipping branch creation and PR.');
-      return { hasChanges: false, batchFixResponse };
+      return { hasChanges: false, batchFixResponse, severityMap };
     }
 
     core.info('----- Git diff -----');
@@ -169,7 +194,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to show git diff: ${error.message}`);
     }
 
-    return { hasChanges: true, batchFixResponse };
+    return { hasChanges: true, batchFixResponse, severityMap };
   } catch (error) {
     throw new Error(`Failed to run Fix for SAST: ${error.message}`);
   }
