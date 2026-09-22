@@ -123,6 +123,43 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
           const parsed = JSON.parse(jsonStr.substring(0, jsonEnd));
           // CLI wraps the batch response in { fixSessionId, patch }
           batchFixResponse = parsed.patch || parsed;
+
+          // Build a map of issueId to {fix_id, severity} from results.json
+          const findingsMap = {};
+          try {
+            const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
+            const resultsJson = JSON.parse(resultsContent);
+            if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
+              resultsJson.findings.forEach(finding => {
+                const issueId = finding.issue_id;
+                const fixId = finding.fix_id || 'N/A';
+                const severityValue = finding.severity || 3;
+                let severityText = 'Medium';
+                if (severityValue === 5) severityText = 'Very High';
+                else if (severityValue === 4) severityText = 'High';
+                else if (severityValue === 3) severityText = 'Medium';
+                else if (severityValue === 2) severityText = 'Low';
+                else if (severityValue === 1) severityText = 'Informational';
+
+                if (issueId) {
+                  findingsMap[issueId] = { fix_id: fixId, severity: severityText };
+                }
+              });
+            }
+          } catch (mapError) {
+            core.warn(`Unable to build findings map: ${mapError.message}`);
+          }
+
+          // Append fix_id and severity to each flaw
+          if (batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
+            batchFixResponse.flaws.forEach(flaw => {
+              if (findingsMap[flaw.issueId]) {
+                flaw.fix_id = findingsMap[flaw.issueId].fix_id;
+                flaw.severity = findingsMap[flaw.issueId].severity;
+              }
+            });
+          }
+
           const responseDir = path.join(workspaceDir, 'veracode_artifact_directory');
           fs.mkdirSync(responseDir, { recursive: true });
           const responseFilePath = path.join(responseDir, 'sast-fix-batch-response.json');
@@ -155,35 +192,10 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to check git diff: ${error.message}`);
     }
 
-    // Read severity mapping from results.json if available
-    let severityMap = {};
-    try {
-      const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
-      const resultsJson = JSON.parse(resultsContent);
-      if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
-        resultsJson.findings.forEach(finding => {
-          const cweId = finding.cwe_id ? `CWE-${finding.cwe_id}` : null;
-
-          if (cweId && !severityMap[cweId]) {
-            // Map severity level to string
-            const severityValue = finding.severity || 3;
-            let severityText = 'Medium';
-            if (severityValue === 5) severityText = 'Very High';
-            else if (severityValue === 4) severityText = 'High';
-            else if (severityValue === 3) severityText = 'Medium';
-            else if (severityValue === 2) severityText = 'Low';
-            else if (severityValue === 1) severityText = 'Informational';
-            severityMap[cweId] = severityText;
-          }
-        });
-      }
-    } catch (error) {
-      core.warn(`Unable to read severity mapping from results.json: ${error.message}`);
-    }
 
     if (!hasChanges) {
       core.info('No changes to existing files detected. Skipping branch creation and PR.');
-      return { hasChanges: false, batchFixResponse, severityMap };
+      return { hasChanges: false, batchFixResponse };
     }
 
     core.info('----- Git diff -----');
@@ -195,7 +207,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to show git diff: ${error.message}`);
     }
 
-    return { hasChanges: true, batchFixResponse, severityMap };
+    return { hasChanges: true, batchFixResponse };
   } catch (error) {
     throw new Error(`Failed to run Fix for SAST: ${error.message}`);
   }
