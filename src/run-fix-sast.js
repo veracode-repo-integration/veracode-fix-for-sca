@@ -132,6 +132,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
             if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
               resultsJson.findings.forEach(finding => {
                 const issueId = finding.issue_id;
+                core.info(`Mapping issueId ${issueId} to fix_id ${finding.fix_id} and severity ${finding.severity}`);
                 const fixId = finding.fix_id || 'N/A';
                 const severityValue = finding.severity || 3;
                 let severityText = 'Medium';
@@ -153,6 +154,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
           // Append fix_id and severity to each flaw
           if (batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
             batchFixResponse.flaws.forEach(flaw => {
+              core.info(`Processing flaw with issueId ${flaw.issueId}`);
               if (findingsMap[flaw.issueId]) {
                 flaw.fix_id = findingsMap[flaw.issueId].fix_id;
                 flaw.severity = findingsMap[flaw.issueId].severity;
