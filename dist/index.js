@@ -88831,17 +88831,15 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
           // CLI wraps the batch response in { fixSessionId, patch }
           batchFixResponse = parsed.patch || parsed;
 
-          // Build a map of cwe_id:path:severity to {fix_id} from results.json
-          // (Line numbers not available in results.json, so use CWE + path + severity)
+          // Build a map of issue_id to finding details from results.json
           const findingsMap = {};
           try {
             const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
             const resultsJson = JSON.parse(resultsContent);
 
             if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
-              resultsJson.findings.forEach((finding, idx) => {
-                const filePath = finding.files?.source_file?.file || finding.path || '';
-                const cweId = finding.cwe_id || 'unknown';
+              resultsJson.findings.forEach((finding) => {
+                const issueId = finding.issue_id;
                 const fixId = finding.fix_id || 'N/A';
                 const severityValue = finding.severity || 3;
                 let severityText = 'Medium';
@@ -88851,14 +88849,22 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
                 else if (severityValue === 2) severityText = 'Low';
                 else if (severityValue === 1) severityText = 'Informational';
 
-                const key = `${cweId}:${filePath}:${severityValue}`;
-                findingsMap[key] = { fix_id: fixId, severity: severityText };
+                findingsMap[issueId] = { fix_id: fixId, severity: severityText, cwe_id: finding.cwe_id };
               });
             } else {
               core.warn(`No findings array in results.json`);
             }
           } catch (mapError) {
             core.warn(`Unable to build findings map: ${mapError.message}`);
+          }
+
+          // Enrich batch response flaws with severity and fix_id (using dummy data for now)
+          if (batchFixResponse && batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
+            batchFixResponse.flaws.forEach((flaw) => {
+              // Use dummy values for now since we're testing with dummy data
+              flaw.severity = flaw.severity || 'High';
+              flaw.fix_id = flaw.fix_id || `SAST-${Math.floor(Math.random() * 10000)}`;
+            });
           }
 
           core.info(`Batch fix response: ${JSON.stringify(batchFixResponse, null, 2)}`);
