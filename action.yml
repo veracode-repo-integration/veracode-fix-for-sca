@@ -32,6 +32,9 @@ inputs:
   fix-sast-params:
     description: "SAST Fix IDs (e.g., SAST-123, SAST-456)"
     required: false
+  results-blob-sha:
+    description: "Git blob SHA (in the veracode repo) of the fix_id-enriched results.json, dispatched by veracode-github-app for SAST fixes"
+    required: false
 
 # outputs:
 #   run-next-step:

@@ -6,6 +6,7 @@ const runFixSca = require('./run-fix-sca');
 const runFixSast = require('./run-fix-sast');
 const createPr = require('./create-pr');
 const uploadPrComment = require('./upload-pr-comment');
+const fetchSastResultsBlob = require('./fetch-sast-results');
 
 async function main() {
   try {
@@ -18,6 +19,7 @@ async function main() {
     
     const fixScaParams = core.getInput('fix-sca-params');
     const fixSastParams = core.getInput('fix-sast-params');
+    const resultsBlobSha = core.getInput('results-blob-sha');
     
     core.info(`DEBUG: fixScaParams = "${fixScaParams}"`);
     core.info(`DEBUG: fixSastParams = "${fixSastParams}"`);
@@ -43,6 +45,15 @@ async function main() {
 
     core.info('Running Fix for On the basis of comment...');
     if (isSastFix) {
+      // Materialize the enriched results.json (full 1-results.json + fix_id) from the git
+      // blob dispatched by veracode-github-app. Skipped if no blob SHA was provided, in
+      // which case results.json is expected to already exist in veracode_artifact_directory.
+      if (resultsBlobSha) {
+        await fetchSastResultsBlob(workspaceDir, repository, githubToken, githubApiUrl, resultsBlobSha);
+      } else {
+        core.warning('No results-blob-sha provided; expecting results.json to already exist in veracode_artifact_directory');
+      }
+
       core.info('Running SAST Fix...');
       fixOutput = await runFixSast(workspaceDir, actionPath, paramsToUse, sourceCodeDir);
       core.info(`SAST Fix Result: hasChanges=${fixOutput.hasChanges}, hasBatchResponse=${!!fixOutput.batchFixResponse}`);
