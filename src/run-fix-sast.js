@@ -60,6 +60,8 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
     if (fixRemote?.toLowerCase() === 'true') {
       core.info(`remote argument appended`)
       args.push('--remote');
+      args.push('--local');
+    
     }
 
     // @actions/exec forwards CLI stdout and stderr to the GitHub Actions log.
