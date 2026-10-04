@@ -103,8 +103,8 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
         }
         if (jsonEnd > 0) {
           const parsed = JSON.parse(jsonStr.substring(0, jsonEnd));
-          // CLI wraps the batch response in { fixSessionId, patch }
-          batchFixResponse = parsed.patch || parsed;
+          // CLI wraps the batch response in { sca, sast } (new) or { fixSessionId, patch } (old)
+          batchFixResponse = parsed.sast || parsed.patch || parsed;
 
           // Build a map of issue_id to finding details from results.json
           const findingsMap = {};
