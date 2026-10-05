@@ -162,11 +162,12 @@ function generateSastCommentBody(batchFixResponse, fixPrNumber, fixPrUrl) {
 
   body += '### Next Steps\n';
   if (fixPrNumber) {
-    body += `1. Review and merge the fix PR [#${fixPrNumber}](${fixPrUrl}).\n`;
-    body += '2. Run your test suite to confirm no regressions.\n';
-    body += '3. Re-run the SAST scan to verify findings are resolved.\n';
+    body += `1. Review the changes in the Fix for SAST PR [#${fixPrNumber}](${fixPrUrl}).\n`;
+    body += '2. Verify that tests pass.\n';
+    body += '3. Merge the PR to apply the code fixes.\n';
+    body += '4. Re-run the SAST scan to verify the fixes.\n';
   } else {
-    body += '1. Re-run the SAST scan to verify findings are resolved.\n';
+    body += '1. Re-run the SAST scan to verify the fixes.\n';
   }
 
   return body;

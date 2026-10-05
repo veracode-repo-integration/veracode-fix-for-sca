@@ -60,7 +60,6 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
     if (fixRemote?.toLowerCase() === 'true') {
       core.info(`remote argument appended`)
       args.push('--remote');
-      args.push('--local');
     
     }
 
@@ -80,6 +79,16 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
         errline: (line) => core.warning(`CLI error: ${line}`),
         debug: (message) => core.debug(`CLI debug: ${message}`)
       }
+    });
+
+    // Set GitHub output with the batch fix response
+    const sastResponsePath = path.join(sourceCodeDir, 'sast_fix_response.json');
+    if (fs.existsSync(sastResponsePath)) {
+      const sastResponseContent = fs.readFileSync(sastResponsePath, 'utf8');
+      core.info(`SAST Fix Response JSON file: ${sastResponseContent}`);
+    }
+    await exec.exec('bash', ['-c', `echo "result=$(cat sast_fix_response.json)" >> $GITHUB_OUTPUT`], {
+      cwd: sourceCodeDir
     });
 
     // Extract the JSON batch fix response from CLI stdout.
