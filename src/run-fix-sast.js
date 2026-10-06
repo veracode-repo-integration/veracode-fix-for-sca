@@ -35,8 +35,8 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
 
     const credentialsPath = path.join(os.homedir(), '.veracode', 'credentials');
     if (!fs.existsSync(credentialsPath)) {
-      const apiId = process.env.VERACODE_API_KEY_ID_DEV;
-      const apiKey = process.env.VERACODE_API_KEY_SECRET_DEV;
+      const apiId = process.env.VERACODE_API_KEY_ID;
+      const apiKey = process.env.VERACODE_API_KEY_SECRET;
       core.info(`API KEY ${apiId}`);
       core.info(`API SECRET ${apiKey}`);
       if (apiId && apiKey) {
@@ -45,7 +45,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
         const credentialsContent = `[default]\nveracode_api_key_id = ${apiId}\nveracode_api_key_secret = ${apiKey}\n`;
         fs.writeFileSync(credentialsPath, credentialsContent, { mode: 0o600 });
       } else {
-        core.warning(`VERACODE_API_KEY_ID_DEV or VERACODE_API_KEY_SECRET_DEV not set in environment`);
+        core.warning(`VERACODE_API_KEY_ID or VERACODE_API_KEY_SECRET not set in environment`);
       }
     }
 
