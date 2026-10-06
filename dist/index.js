@@ -88846,7 +88846,6 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
 
     // @actions/exec forwards CLI stdout and stderr to the GitHub Actions log.
     core.info(`Running: ${veracodeBinary} ${args.join(' ')}`);
-    const allStdLines = [];
     await exec.exec(veracodeBinary, args, {
       env: { ...process.env },
       cwd: sourceCodeDir,
@@ -88873,84 +88872,60 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       cwd: sourceCodeDir
     });
 
-    // Extract the JSON batch fix response from CLI stdout.
-    // The CLI prints structured log lines followed by a JSON object block.
+    // Parse the SAST fix response and enrich flaws with severity and fix_id from results.json
+    let batchFixResponse = null;
+    try {
+      if (fs.existsSync(sastResponsePath)) {
+        const sastResponseJson = JSON.parse(fs.readFileSync(sastResponsePath, 'utf8'));
+        batchFixResponse = sastResponseJson.patch || sastResponseJson;
 
+        // Build a map of issue_id → { fix_id, severity } from results.json
+        const findingsMap = {};
+        try {
+          const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
+          const resultsJson = JSON.parse(resultsContent);
+          if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
+            resultsJson.findings.forEach((finding) => {
+              const issueId = finding.issue_id;
+              const fixId = finding.fix_id || 'N/A';
+              const severityValue = finding.severity || 3;
+              let severityText = 'Medium';
+              if (severityValue === 5) severityText = 'Very High';
+              else if (severityValue === 4) severityText = 'High';
+              else if (severityValue === 3) severityText = 'Medium';
+              else if (severityValue === 2) severityText = 'Low';
+              else if (severityValue === 1) severityText = 'Informational';
+              findingsMap[issueId] = { fix_id: fixId, severity: severityText };
+            });
+          } else {
+            core.warning('No findings array in results.json');
+          }
+        } catch (mapError) {
+          core.warning(`Unable to build findings map: ${mapError.message}`);
+        }
 
+        // Enrich flaws with severity and fix_id matched by issueId
+        if (batchFixResponse && batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
+          batchFixResponse.flaws.forEach((flaw) => {
+            const match = findingsMap[flaw.issueId];
+            flaw.severity = match ? match.severity : 'Medium';
+            flaw.fix_id = match ? match.fix_id : 'N/A';
+          });
+        }
 
-    // let batchFixResponse = null;
-    // try {
-    //   const fullOutput = allStdLines.join('\n');
-    //   // Find the first line that is exactly '{' — start of the JSON block
-    //   const jsonStart = fullOutput.search(/(^|\n)\{/);
-    //   if (jsonStart !== -1) {
-    //     const jsonStr = fullOutput.substring(fullOutput.indexOf('{', jsonStart));
-    //     // Walk character by character to find the balanced closing brace
-    //     let depth = 0;
-    //     let jsonEnd = -1;
-    //     for (let i = 0; i < jsonStr.length; i++) {
-    //       if (jsonStr[i] === '{') depth++;
-    //       else if (jsonStr[i] === '}') {
-    //         depth--;
-    //         if (depth === 0) { jsonEnd = i + 1; break; }
-    //       }
-    //     }
-    //     if (jsonEnd > 0) {
-    //       const parsed = JSON.parse(jsonStr.substring(0, jsonEnd));
-    //       // CLI wraps the batch response in { sca, sast } (new) or { fixSessionId, patch } (old)
-    //       batchFixResponse = parsed.sast || parsed.patch || parsed;
+        core.info(`Batch fix response: ${JSON.stringify(batchFixResponse, null, 2)}`);
 
-    //       // Build a map of issue_id to finding details from results.json
-    //       const findingsMap = {};
-    //       try {
-    //         const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
-    //         const resultsJson = JSON.parse(resultsContent);
-
-    //         if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
-    //           resultsJson.findings.forEach((finding) => {
-    //             const issueId = finding.issue_id;
-    //             const fixId = finding.fix_id || 'N/A';
-    //             const severityValue = finding.severity || 3;
-    //             let severityText = 'Medium';
-    //             if (severityValue === 5) severityText = 'Very High';
-    //             else if (severityValue === 4) severityText = 'High';
-    //             else if (severityValue === 3) severityText = 'Medium';
-    //             else if (severityValue === 2) severityText = 'Low';
-    //             else if (severityValue === 1) severityText = 'Informational';
-
-    //             findingsMap[issueId] = { fix_id: fixId, severity: severityText, cwe_id: finding.cwe_id };
-    //           });
-    //         } else {
-    //           core.warn(`No findings array in results.json`);
-    //         }
-    //       } catch (mapError) {
-    //         core.warn(`Unable to build findings map: ${mapError.message}`);
-    //       }
-
-    //       // Enrich batch response flaws with severity and fix_id (using dummy data for now)
-    //       if (batchFixResponse && batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
-    //         batchFixResponse.flaws.forEach((flaw) => {
-    //           // Use dummy values for now since we're testing with dummy data
-    //           flaw.severity = flaw.severity || 'High';
-    //           flaw.fix_id = flaw.fix_id || `SAST-${Math.floor(Math.random() * 10000)}`;
-    //         });
-    //       }
-
-    //       core.info(`Batch fix response: ${JSON.stringify(batchFixResponse, null, 2)}`);
-
-    //       const responseDir = path.join(workspaceDir, 'veracode_artifact_directory');
-    //       fs.mkdirSync(responseDir, { recursive: true });
-    //       const responseFilePath = path.join(responseDir, 'sast-fix-batch-response.json');
-    //       fs.writeFileSync(responseFilePath, JSON.stringify(batchFixResponse, null, 2));
-    //       core.info(`CLI batch fix response saved to ${responseFilePath}`);
-    //     }
-    //   }
-    //   if (!batchFixResponse) {
-    //     core.warning('Could not find JSON block in CLI stdout. Batch fix response will be unavailable.');
-    //   }
-    // } catch (parseError) {
-    //   core.warning(`Failed to parse CLI batch fix response: ${parseError.message}`);
-    // }
+        const responseDir = path.join(workspaceDir, 'veracode_artifact_directory');
+        fs.mkdirSync(responseDir, { recursive: true });
+        const responseFilePath = path.join(responseDir, 'sast-fix-batch-response.json');
+        fs.writeFileSync(responseFilePath, JSON.stringify(batchFixResponse, null, 2));
+        core.info(`CLI batch fix response saved to ${responseFilePath}`);
+      } else {
+        core.warning(`SAST fix response file not found at ${sastResponsePath}`);
+      }
+    } catch (parseError) {
+      core.warning(`Failed to parse SAST fix response: ${parseError.message}`);
+    }
 
     let hasChanges = false;
     let gitDiffOutput = '';
