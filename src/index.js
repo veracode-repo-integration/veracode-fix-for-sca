@@ -1,6 +1,7 @@
 const core = require('@actions/core');
 const fs = require('fs');
 const path = require('path');
+const github = require('@actions/github');
 const setupAstGrep = require('./setup-ast-grep');
 const runFixSca = require('./run-fix-sca');
 const runFixSast = require('./run-fix-sast');
@@ -16,19 +17,22 @@ async function main() {
     const branch = core.getInput('branch');
     const githubApiUrl = core.getInput('github-api-url');
     const prNumber = core.getInput('pr-number');
-    
+    const fnfFeatureFlag = core.getInput('fnf-feature-flag');
     const fixScaParams = core.getInput('fix-sca-params');
     const fixSastParams = core.getInput('fix-sast-params');
     const resultsBlobSha = core.getInput('results-blob-sha');
-    
+
     core.info(`DEBUG: fixScaParams = "${fixScaParams}"`);
     core.info(`DEBUG: fixSastParams = "${fixSastParams}"`);
-    
+
     // Determine if this is SAST or SCA fix
     const isSastFix = fixSastParams && fixSastParams.includes('SAST-');
     let paramsToUse = isSastFix ? fixSastParams : fixScaParams;
 
 
+
+    // Nested: client_payload allows only 10 top-level properties
+    const correlationId = github.context.payload.client_payload?.user_config?.correlation_id;
 
     const workspaceDir = process.env.GITHUB_WORKSPACE;
     const statusFilePath = path.join(workspaceDir, 'source-code', 'sca-fix-status');
@@ -36,6 +40,9 @@ async function main() {
     const sourceCodeDir = path.join(workspaceDir, 'source-code');
 
     core.info('Starting Veracode Fix for SCA action...');
+
+    // FNF needs a correlation_id for the callback; without one the run stays in polling mode
+    const enableFnf = fnfFeatureFlag === 'true' && !!correlationId;
 
     // Setup ast-grep
     core.info('Setting up ast-grep...');
@@ -58,9 +65,17 @@ async function main() {
       fixOutput = await runFixSast(workspaceDir, actionPath, paramsToUse, sourceCodeDir);
       core.info(`SAST Fix Result: hasChanges=${fixOutput.hasChanges}, hasBatchResponse=${!!fixOutput.batchFixResponse}`);
     } else {
-      core.info('Running Fix for SCA...');
-      fixOutput = await runFixSca(workspaceDir, actionPath, paramsToUse, sourceCodeDir);
-      core.info(`SCA Fix Result: ${JSON.stringify(fixOutput)}`);
+      try {
+        fixOutput = await runFixSca(workspaceDir, actionPath, fixScaParams, enableFnf, correlationId);
+      } catch (fixScaError) {
+        core.error(`Fix for SCA failed: ${fixScaError.message}`);
+        core.setOutput('run-next-step', 'false');
+        throw fixScaError;
+      }
+      // Fire-and-forget mode: exit early, backend handles everything
+      if (fixOutput.fireAndForget) {
+        return;
+      }
     }
 
     if (!fixOutput.hasChanges) {

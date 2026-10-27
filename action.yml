@@ -29,6 +29,10 @@ inputs:
     description: "Fix remote flag (default: true)"
     required: true
     default: 'true'
+  fnf-feature-flag:
+    description: "Enable fire-and-forget async callback mode (default: true)"
+    required: false
+    default: 'true'
   fix-sast-params:
     description: "SAST Fix IDs (e.g., SAST-123, SAST-456)"
     required: false

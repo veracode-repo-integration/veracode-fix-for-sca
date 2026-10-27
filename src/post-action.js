@@ -1,5 +1,7 @@
 const core = require('@actions/core');
+const github = require('@actions/github');
 const {DefaultArtifactClient} = require('@actions/artifact')
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
@@ -22,6 +24,15 @@ async function post() {
         artifactFiles.push(statusFilePath);
     } else {
         core.info(`${statusFilename} not found. Not included in artifact list.`);
+    }
+
+    // Hashed so the artifact never exposes the correlation_id itself
+    const correlationId = github.context.payload.client_payload?.user_config?.correlation_id;
+    const sourceCodeDir = path.join(workspaceDir, 'source-code');
+    if (correlationId && fs.existsSync(sourceCodeDir)) {
+        const hashFilePath = path.join(sourceCodeDir, 'sca-fix-correlation-hash');
+        fs.writeFileSync(hashFilePath, crypto.createHash('sha256').update(correlationId).digest('hex'));
+        artifactFiles.push(hashFilePath);
     }
 
     if (artifactFiles.length > 0) {
