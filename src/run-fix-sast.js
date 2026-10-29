@@ -76,69 +76,25 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
     });
 
     core.info(`CLI execution completed. Checking for changes in source code directory: ${sourceCodeDir}`);
-    // Set GitHub output with the batch fix response
-    const sastResponsePath = path.join(sourceCodeDir, 'sast_fix_response.json');
-    if (fs.existsSync(sastResponsePath)) {
-      const sastResponseContent = fs.readFileSync(sastResponsePath, 'utf8');
-      core.info(`SAST Fix Response JSON file: ${sastResponseContent}`);
-    }
-    await exec.exec('bash', ['-c', `echo "result=$(cat sast_fix_response.json)" >> $GITHUB_OUTPUT`], {
-      cwd: sourceCodeDir
-    });
 
-    // Parse the SAST fix response and enrich flaws with severity and fix_id from results.json
-    let batchFixResponse = null;
-    try {
-      if (fs.existsSync(sastResponsePath)) {
-        const sastResponseJson = JSON.parse(fs.readFileSync(sastResponsePath, 'utf8'));
-        batchFixResponse = sastResponseJson.patch || sastResponseJson;
-
-        // Build a map of issue_id → { fix_id, severity } from results.json
-        const findingsMap = {};
-        try {
-          const resultsContent = fs.readFileSync(resultsFilePath, 'utf8');
-          const resultsJson = JSON.parse(resultsContent);
-          if (resultsJson.findings && Array.isArray(resultsJson.findings)) {
-            resultsJson.findings.forEach((finding) => {
-              const issueId = finding.issue_id;
-              const fixId = finding.fix_id || 'N/A';
-              const severityValue = finding.severity || 3;
-              let severityText = 'Medium';
-              if (severityValue === 5) severityText = 'Very High';
-              else if (severityValue === 4) severityText = 'High';
-              else if (severityValue === 3) severityText = 'Medium';
-              else if (severityValue === 2) severityText = 'Low';
-              else if (severityValue === 1) severityText = 'Informational';
-              findingsMap[issueId] = { fix_id: fixId, severity: severityText };
-            });
-          } else {
-            core.warning('No findings array in results.json');
-          }
-        } catch (mapError) {
-          core.warning(`Unable to build findings map: ${mapError.message}`);
-        }
-
-        // Enrich flaws with severity and fix_id matched by issueId
-        if (batchFixResponse && batchFixResponse.flaws && Array.isArray(batchFixResponse.flaws)) {
-          batchFixResponse.flaws.forEach((flaw) => {
-            const match = findingsMap[flaw.issueId];
-            flaw.severity = match ? match.severity : 'Medium';
-            flaw.fix_id = match ? match.fix_id : 'N/A';
-          });
-        }
-
-        core.info(`Batch fix response: ${JSON.stringify(batchFixResponse, null, 2)}`);
-
-        const responseDir = path.join(workspaceDir, 'veracode_artifact_directory');
-        fs.mkdirSync(responseDir, { recursive: true });
-        const responseFilePath = path.join(responseDir, 'sast-fix-batch-response.json');
-        fs.writeFileSync(responseFilePath, JSON.stringify(batchFixResponse, null, 2));
-        core.info(`CLI batch fix response saved to ${responseFilePath}`);
-      } else {
-        core.warning(`SAST fix response file not found at ${sastResponsePath}`);
+    // Enrich the CLI-generated sast-fix-report.md with per-CWE severity, looked up from
+    // the SAST results.json (the report itself has no severity information).
+    const reportPath = path.join(sourceCodeDir, 'sast-fix-report.md');
+    let reportContent = null;
+    if (fs.existsSync(reportPath)) {
+      try {
+        const rawReport = fs.readFileSync(reportPath, 'utf8');
+        const resultsJson = JSON.parse(fs.readFileSync(resultsFilePath, 'utf8'));
+        const cweSeverityMap = buildCweSeverityMap(resultsJson);
+        reportContent = appendSeverityToReport(rawReport, cweSeverityMap);
+        fs.writeFileSync(reportPath, reportContent, 'utf8');
+        core.info('Enriched sast-fix-report.md with CWE severity information');
+      } catch (reportError) {
+        core.warning(`Failed to enrich sast-fix-report.md with severity info: ${reportError.message}`);
+        reportContent = fs.readFileSync(reportPath, 'utf8');
       }
-    } catch (parseError) {
-      core.warning(`Failed to parse SAST fix response: ${parseError.message}`);
+    } else {
+      core.warning(`sast-fix-report.md not found at ${reportPath}`);
     }
 
     let hasChanges = false;
@@ -162,7 +118,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
 
     if (!hasChanges) {
       core.info('No changes to existing files detected. Skipping branch creation and PR.');
-      return { hasChanges: false, batchFixResponse };
+      return { hasChanges: false, reportContent };
     }
 
     core.info('----- Git diff -----');
@@ -174,10 +130,40 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
       core.warning(`Failed to show git diff: ${error.message}`);
     }
 
-    return { hasChanges: true, batchFixResponse };
+    return { hasChanges: true, reportContent };
   } catch (error) {
     throw new Error(`Failed to run Fix for SAST: ${error.message}`);
   }
+}
+
+const SEVERITY_LABELS = { 5: 'Very High', 4: 'High', 3: 'Medium', 2: 'Low', 1: 'Informational' };
+
+/**
+ * Build a map of cwe_id -> { value, label } from results.json findings, keeping the
+ * highest severity seen for each CWE (a CWE can have multiple findings of differing severity).
+ */
+function buildCweSeverityMap(resultsJson) {
+  const map = {};
+  if (resultsJson?.findings && Array.isArray(resultsJson.findings)) {
+    resultsJson.findings.forEach((finding) => {
+      const cweId = String(finding.cwe_id);
+      const severityValue = finding.severity ?? 3;
+      if (!map[cweId] || severityValue > map[cweId].value) {
+        map[cweId] = { value: severityValue, label: SEVERITY_LABELS[severityValue] || 'Medium' };
+      }
+    });
+  }
+  return map;
+}
+
+/**
+ * Appends "[<severity>]" after every "CWE-<id> (<count>)" occurrence in the report text.
+ */
+function appendSeverityToReport(reportContent, cweSeverityMap) {
+  return reportContent.replace(/CWE-(\d+)\s*\((\d+)\)/g, (match, cweId, count) => {
+    const severity = cweSeverityMap[cweId];
+    return severity ? `CWE-${cweId} (${count}) [${severity.label}]` : match;
+  });
 }
 
 module.exports = runFixSast;
