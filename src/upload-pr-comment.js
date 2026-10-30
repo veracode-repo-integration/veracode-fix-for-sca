@@ -72,14 +72,11 @@ async function postSastCommentDirectly(owner, repo, prNumber, githubToken, sourc
     const reportPath = path.join(sourceCodeDir, 'sast-fix-report.md');
     let commentBody;
     if (fs.existsSync(reportPath)) {
-      commentBody = fs.readFileSync(reportPath, 'utf8');
+      const reportContent = fs.readFileSync(reportPath, 'utf8');
+      commentBody = generateSastCommentBody(reportContent, fixPrNumber, fixPrUrl);
     } else {
       core.warning(`sast-fix-report.md not found at ${reportPath}. Posting default comment.`);
       commentBody = '## Veracode Fix for SAST\n\nNo automated fixes were generated for the submitted findings.\n';
-    }
-
-    if (fixPrNumber && fixPrUrl) {
-      commentBody += `\n\n**Fix PR:** [#${fixPrNumber}](${fixPrUrl})\n`;
     }
 
     const octokit = github.getOctokit(githubToken);
@@ -102,6 +99,80 @@ async function postSastCommentDirectly(owner, repo, prNumber, githubToken, sourc
   } catch (error) {
     core.warning(`Failed to post SAST fix comment: ${error.message}`);
   }
+}
+
+/**
+ * Builds the fixed-format comment posted on the original PR: a PR link, the fix IDs and
+ * CWE IDs pulled out of the enriched sast-fix-report.md, and a constant 4-step Next Steps list.
+ * The full per-CWE breakdown stays in the Fix PR's own description (create-pr.js uses the
+ * report as-is there); this comment is a short pointer to it.
+ */
+function generateSastCommentBody(reportContent, fixPrNumber, fixPrUrl) {
+  const fixIds = extractFixIds(reportContent);
+  const cwes = extractCwes(reportContent);
+
+  let body = fixPrNumber
+    ? '## Veracode Fix for SAST - Pull Request Created\n\n'
+    : '## Veracode Fix for SAST\n\n';
+
+  if (fixPrNumber && fixPrUrl) {
+    body += `**PR:** [#${fixPrNumber}](${fixPrUrl})\n\n`;
+  }
+
+  if (fixIds.length > 0) {
+    body += `This PR contains automated fixes for the SAST vulnerability: ${fixIds.map((id) => `\`${id}\``).join(' ')}\n\n`;
+  }
+
+  if (cwes.length > 0) {
+    body += `Applying fixes for the following CWE IDs: ${cwes.map((cwe) => `${cwe.label} CWE-${cwe.id}`).join('  ')}\n\n`;
+  }
+
+  body += '**Next Steps:**\n';
+  if (fixPrNumber) {
+    body += '1. Review the changes in the Fix for SAST PR.\n';
+    body += '2. Verify that tests pass.\n';
+    body += '3. Merge the PR to apply the security fixes.\n';
+    body += '4. Re-run the SAST scan to verify the fixes.\n';
+  } else {
+    body += '1. Re-run the SAST scan to verify the fixes.\n';
+  }
+
+  return body;
+}
+
+/**
+ * Pulls distinct "Fix ID: `SAST-xxxx-xx`" values out of the report, in first-seen order.
+ */
+function extractFixIds(reportContent) {
+  const fixIds = [];
+  const seen = new Set();
+  const regex = /Fix ID:\s*`?([\w.-]+)`?/g;
+  let match;
+  while ((match = regex.exec(reportContent)) !== null) {
+    if (!seen.has(match[1])) {
+      seen.add(match[1]);
+      fixIds.push(match[1]);
+    }
+  }
+  return fixIds;
+}
+
+/**
+ * Pulls distinct "CWE-<id> (<count>) [<severity emoji>]" entries (written by
+ * appendSeverityToReport in run-fix-sast.js) out of the report, in first-seen order.
+ */
+function extractCwes(reportContent) {
+  const cwes = [];
+  const seen = new Set();
+  const regex = /CWE-(\d+)\s*\(\d+\)\s*\[([^\]]+)\]/g;
+  let match;
+  while ((match = regex.exec(reportContent)) !== null) {
+    if (!seen.has(match[1])) {
+      seen.add(match[1]);
+      cwes.push({ id: match[1], label: match[2] });
+    }
+  }
+  return cwes;
 }
 
 function generateDefaultCommentBody(prResponseStr) {

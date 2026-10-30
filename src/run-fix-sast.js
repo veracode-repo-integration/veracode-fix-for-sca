@@ -87,6 +87,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
         const resultsJson = JSON.parse(fs.readFileSync(resultsFilePath, 'utf8'));
         const cweSeverityMap = buildCweSeverityMap(resultsJson);
         reportContent = appendSeverityToReport(rawReport, cweSeverityMap);
+        reportContent = appendRescanNote(reportContent);
         fs.writeFileSync(reportPath, reportContent, 'utf8');
         core.info('Enriched sast-fix-report.md with CWE severity information');
       } catch (reportError) {
@@ -164,6 +165,13 @@ function appendSeverityToReport(reportContent, cweSeverityMap) {
     const severity = cweSeverityMap[cweId];
     return severity ? `CWE-${cweId} (${count}) [${severity.label}]` : match;
   });
+}
+
+/**
+ * Appends a GitHub Markdown alert reminding reviewers to rescan to confirm CWE fixes.
+ */
+function appendRescanNote(reportContent) {
+  return `${reportContent.trimEnd()}\n\n> [!NOTE]\n> Rescan is recommended to confirm CWE fixes.\n`;
 }
 
 module.exports = runFixSast;
