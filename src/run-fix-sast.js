@@ -158,12 +158,14 @@ function buildCweSeverityMap(resultsJson) {
 }
 
 /**
- * Appends "[<severity>]" after every "CWE-<id> (<count>)" occurrence in the report text.
+ * Prefixes every "CWE-<id>" occurrence in the report text with its severity emoji.
+ * Matches the CWE id whether it's plain text or wrapped in backticks (`` `CWE-564` ``),
+ * regardless of what follows it on the line.
  */
 function appendSeverityToReport(reportContent, cweSeverityMap) {
-  return reportContent.replace(/CWE-(\d+)\s*\((\d+)\)/g, (match, cweId, count) => {
+  return reportContent.replace(/`?CWE-(\d+)`?/g, (match, cweId) => {
     const severity = cweSeverityMap[cweId];
-    return severity ? `CWE-${cweId} (${count}) [${severity.label}]` : match;
+    return severity ? `${severity.label} ${match}` : match;
   });
 }
 

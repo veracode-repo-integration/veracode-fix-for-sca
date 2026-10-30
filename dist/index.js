@@ -88862,12 +88862,14 @@ function buildCweSeverityMap(resultsJson) {
 }
 
 /**
- * Appends "[<severity>]" after every "CWE-<id> (<count>)" occurrence in the report text.
+ * Prefixes every "CWE-<id>" occurrence in the report text with its severity emoji.
+ * Matches the CWE id whether it's plain text or wrapped in backticks (`` `CWE-564` ``),
+ * regardless of what follows it on the line.
  */
 function appendSeverityToReport(reportContent, cweSeverityMap) {
-  return reportContent.replace(/CWE-(\d+)\s*\((\d+)\)/g, (match, cweId, count) => {
+  return reportContent.replace(/`?CWE-(\d+)`?/g, (match, cweId) => {
     const severity = cweSeverityMap[cweId];
-    return severity ? `CWE-${cweId} (${count}) [${severity.label}]` : match;
+    return severity ? `${severity.label} ${match}` : match;
   });
 }
 
@@ -89301,12 +89303,14 @@ function generateSastCommentBody(reportContent, fixPrNumber, fixPrUrl) {
 }
 
 /**
- * Pulls distinct "Fix ID: `SAST-xxxx-xx`" values out of the report, in first-seen order.
+ * Pulls distinct Fix IDs out of the report's "Fix ID: ..." lines, in first-seen order.
+ * Tolerates the label and/or value being wrapped in markdown emphasis (`**Fix ID:**`)
+ * or inline code (`` `SAST-xxxx-xx` ``).
  */
 function extractFixIds(reportContent) {
   const fixIds = [];
   const seen = new Set();
-  const regex = /Fix ID:\s*`?([\w.-]+)`?/g;
+  const regex = /Fix ID:[*`\s]*([\w.-]+)/g;
   let match;
   while ((match = regex.exec(reportContent)) !== null) {
     if (!seen.has(match[1])) {
@@ -89317,19 +89321,21 @@ function extractFixIds(reportContent) {
   return fixIds;
 }
 
+const SEVERITY_EMOJI = ['🔴', '🟠', '🟡', '🟢', '🔵'];
+
 /**
- * Pulls distinct "CWE-<id> (<count>) [<severity emoji>]" entries (written by
- * appendSeverityToReport in run-fix-sast.js) out of the report, in first-seen order.
+ * Pulls distinct "<severity emoji> CWE-<id>" entries (written by appendSeverityToReport
+ * in run-fix-sast.js) out of the report, in first-seen order.
  */
 function extractCwes(reportContent) {
   const cwes = [];
   const seen = new Set();
-  const regex = /CWE-(\d+)\s*\(\d+\)\s*\[([^\]]+)\]/g;
+  const regex = new RegExp(`(${SEVERITY_EMOJI.join('|')})\\s*\`?CWE-(\\d+)\`?`, 'g');
   let match;
   while ((match = regex.exec(reportContent)) !== null) {
-    if (!seen.has(match[1])) {
-      seen.add(match[1]);
-      cwes.push({ id: match[1], label: match[2] });
+    if (!seen.has(match[2])) {
+      seen.add(match[2]);
+      cwes.push({ id: match[2], label: match[1] });
     }
   }
   return cwes;
