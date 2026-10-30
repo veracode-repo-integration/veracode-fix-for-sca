@@ -88840,7 +88840,7 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
   }
 }
 
-const SEVERITY_LABELS = { 5: 'Very High', 4: 'High', 3: 'Medium', 2: 'Low', 1: 'Informational' };
+const SEVERITY_LABELS = { 5: '🔴', 4: '🟠', 3: '🟡', 2: '🟢', 1: '🔵' };
 
 /**
  * Build a map of cwe_id -> { value, label } from results.json findings, keeping the
