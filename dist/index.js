@@ -88788,12 +88788,14 @@ async function runFixSast(workspaceDir, actionPath, fixScaParams, sourceCodeDir)
     if (fs.existsSync(reportPath)) {
       try {
         const rawReport = fs.readFileSync(reportPath, 'utf8');
+        core.info(`----- Raw sast-fix-report.md -----\n${rawReport}`);
         const resultsJson = JSON.parse(fs.readFileSync(resultsFilePath, 'utf8'));
         const cweSeverityMap = buildCweSeverityMap(resultsJson);
         reportContent = appendSeverityToReport(rawReport, cweSeverityMap);
         reportContent = appendRescanNote(reportContent);
         fs.writeFileSync(reportPath, reportContent, 'utf8');
         core.info('Enriched sast-fix-report.md with CWE severity information');
+        core.info(`----- Enriched sast-fix-report.md -----\n${reportContent}`);
       } catch (reportError) {
         core.warning(`Failed to enrich sast-fix-report.md with severity info: ${reportError.message}`);
         reportContent = fs.readFileSync(reportPath, 'utf8');
