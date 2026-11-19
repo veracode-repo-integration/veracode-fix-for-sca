@@ -32,8 +32,8 @@ async function runFixSast(workspaceDir, sourceCodeDir) {
 
     const credentialsPath = path.join(os.homedir(), '.veracode', 'credentials');
     if (!fs.existsSync(credentialsPath)) {
-      const apiId = process.env.VERACODE_API_KEY_ID;
-      const apiKey = process.env.VERACODE_API_KEY_SECRET;
+      const apiId = process.env.VERACODE_API_KEY_ID_QA;
+      const apiKey = process.env.VERACODE_API_KEY_SECRET_QA;
       if (apiId && apiKey) {
         const credentialsDir = path.dirname(credentialsPath);
         fs.mkdirSync(credentialsDir, { recursive: true });
